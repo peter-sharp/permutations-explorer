@@ -31,13 +31,23 @@
         function pagedList(el){
             const button = render_button()
             button.addEventListener('click', async function fetchMore(ev) {
-                const res = await fetch(`/permutations/${el.dataset.continueWith}`)
-                const variations = await res.json()
-                if(res.ok){
+                let ok = true
+                let res;
+                try {
+                    res = await fetch(`/permutations/${el.dataset.continueWith}`)
+                    if(!res.ok) ok = false
+                } catch(e) {
+                    console.error(e)
+                    ok = false
+                }
+                
+                
+                if(ok){
+                    const variations = await res.json()
                     button.before(render_variations(variations))
                     document.querySelector(el.dataset.permutationCountDisplay).value = render_permutation_count()
                 } 
-                button.classList.toggle('button--error', !res.ok)
+                button.classList.toggle('button--error', !ok)
             });
             el.append(button)
             function render_button() {
