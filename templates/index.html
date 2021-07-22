@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Variations computer</title>
+    <style>
+        .unstyled-list {
+            padding: 0;
+            list-style-type: none;
+        }
+        .cluster > * {
+            display: inline-block;
+            margin-top: 0.6em;
+        }
+
+        .cluster > *:not(:last-child) {
+            margin-right: 1em;
+        }
+
+        .button--error {
+            background-color: #f03;
+            color: #eef;
+            border-color: #a03;
+        }
+    </style>
+    <script type="module">
+        const list = document.querySelector('[data-continue-with]')
+        if(list) pagedList(list)
+        function pagedList(el){
+            const button = render_button()
+            button.addEventListener('click', async function fetchMore(ev) {
+                const res = await fetch(`/permutations/${el.dataset.continueWith}`)
+                const variations = await res.json()
+                if(res.ok){
+                    button.before(render_variations(variations))
+                } 
+                button.classList.toggle('button--error', !res.ok)
+            });
+            el.append(button)
+            function render_button() {
+                const button = document.createElement('button')
+                button.innerText = 'fetch more'
+                return button
+            }
+            
+            function render_variations(variations) {
+                const lis = document.createDocumentFragment()
+                for(const variation of variations) {
+                    const li = document.createElement('li')
+                    li.innerText = variation
+                    lis.append(li)
+                }
+                return lis
+            }
+
+        }
+    </script>
+</head>
+<body>
+    <form action='/' method="POST">
+        <label>Word <input type="text" name="word"></label>
+        {% if error %}
+        <p>{{error}}</p>
+        {% endif %}
+        <p>permutations: <output name="permutationCount">{{permutationCount}}</output></p>
+    </form>
+
+    <ul class="unstyled-list cluster" {% if continueUuid %}data-continue-with="{{continueUuid}}" {% endif %}>
+        {% for variation in variations %}
+        <li>{{variation}}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
