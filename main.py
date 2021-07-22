@@ -1,5 +1,4 @@
-from typing import Generator
-from flask import Flask, render_template, request, abort, jsonify
+from flask import Flask, render_template, request, jsonify
 from string_permutations import string_permutations, MaxPermutationsException
 from multiprocessing import Process, Queue
 import queue
