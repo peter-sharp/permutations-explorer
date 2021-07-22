@@ -1,16 +1,21 @@
+from functools import partial
+import multiprocessing
 from flask import Flask, render_template, request, jsonify
 from string_permutations import string_permutations, MaxPermutationsException
 from multiprocessing import Process, Queue
 import queue
 import os
 import atexit
-import time
+from signal import signal, SIGINT
+from sys import exit
+from unary import unary
 
 from uuid import uuid4, UUID
 app = Flask(__name__)
 
 PAGE_SIZE = 500
 MAX_PAGES = 1000000
+PROCESS_CLOSE_TIMEOUT = 5
 generators = {}
 @app.route('/', methods=['POST', 'GET'])
 def index():
@@ -43,8 +48,9 @@ def index():
 
     return render_template('index.html', variations = variations, word = word, error = err, permutationCount = len(variations), continueUuid = continueUuid)
 
-
+_generator_queue_processes = []
 def with_generator_queue(fn, *args):
+    global _generator_queue_processes
     def generator_queue(q, errQ, *args):
         try:
             for i in fn(*args):
@@ -54,8 +60,11 @@ def with_generator_queue(fn, *args):
     q = Queue(maxsize=PAGE_SIZE * MAX_PAGES)
     errQ = Queue()
     proc = Process(target=generator_queue, name=fn.__name__, args=(q, errQ, *args))
-    with_generator_queue.processes.append(proc)
+    proc.q = q
+    proc.errQ = errQ
     proc.start()
+    _generator_queue_processes.append(proc)
+    print(_generator_queue_processes)
     while proc.is_alive():
         item = None
         try:
@@ -67,13 +76,19 @@ def with_generator_queue(fn, *args):
             except queue.Empty:
                 pass
             if err:
-                proc.close()
+                proc.q.close()
+                proc.errQ.close()
+                proc.kill()
+                proc.join()
                 raise err
         if(item):
             yield item
     print('closing')
-    proc.close()
-with_generator_queue.processes = []
+
+    proc.q.close()
+    proc.errQ.close()
+    proc.kill()
+    proc.join()
         
 
 class InvalidAPIUsage(Exception):
@@ -114,23 +129,22 @@ def permutations(id):
     return jsonify(res)
 
 
-def cleanup():
-    generators.clear()
-    timeout_sec = 5
-    for p in with_generator_queue.processes:  # list of your processes
-        p_sec = 0
-        for second in range(timeout_sec):
-            if p.poll() == None:
-                time.sleep(1)
-                p_sec += 1
-            if p_sec >= timeout_sec:
-                p.kill()  # supported from python 2.6
-    print('cleaned up!')
+def cleanup(processes):
+    if(len(processes)):
+        print(f"closing {len(processes)} processes")
+        for p in processes:  # list of your processes
+            if p.q : p.q.close()
+            if p.errQ : p.errQ.close()
+            p.kill()
+            p.join()
+            print(f"closed process {p.pid}")
+        exit(0)
 
-atexit.register(cleanup)
+
+atexit.register(cleanup, _generator_queue_processes)
 
 if __name__ == '__main__':
-
+    signal(SIGINT, partial(unary(cleanup), _generator_queue_processes))
     app.run('127.0.0.1', port=os.getenv('PORT') or 8000, debug=True)
 
         
